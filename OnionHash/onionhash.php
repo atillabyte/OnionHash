@@ -4,7 +4,7 @@
 /** License: GNU LGPL v3 https://www.gnu.org/licenses/lgpl-3.0.txt **/
 /** Credits: Bryan Ruiz (Encode in Base32 based on RFC 4648.) **/
 
-// oldcoderdrbhuuxh.onion
+// example: oldcoderdrbhuuxh.onion
 $input = <<<EOF
 -----BEGIN RSA PRIVATE KEY-----
 MIICXgIBAAKBgQDuH6AchoiZH55Gxh7eIv25nbMeNpKof9ljrvk+ycjZ08uP6zJV
@@ -23,31 +23,41 @@ cjD45yIxgEbHUR1SXrsA89687/TzXkQXAdY7Ug6cF8tWPg==
 -----END RSA PRIVATE KEY-----
 EOF;
 
-$privateKey = openssl_pkey_get_private(array($input, ""));
+echo OnionHash::hashFromPrivateKey($input);
 
-// We check if the privateKey is valid.
-if (!$privateKey) {
-    echo "The specified privateKey is invalid.";
-	die();
+class OnionHash {
+	public static function hashFromPrivateKey($privateKey) {
+		$privateKey = openssl_pkey_get_private(array($privateKey, ""));
+
+		// We check if the privateKey is valid.
+		if (!$privateKey) {
+			echo "The specified privateKey is invalid.";
+			die();
+		}
+
+		// We obtain the publicKey from the valid privateKey.
+		$publicKey = openssl_pkey_get_details($privateKey)['key'];
+		
+		return self::hashFromPublicKey($publicKey);
+	}
+
+	public static function hashFromPublicKey($publicKey) {
+		// Convert PEM to DER encoding before hashing with SHA-1.
+		$string_start = '-----BEGIN PUBLIC KEY-----';
+		$string_end = '-----END PUBLIC KEY-----';
+		$pem = substr($publicKey, (strpos($publicKey, $string_start)+strlen($string_start)), (strlen($publicKey) - strpos($publicKey, $string_end))*(-1));
+
+		$der = base64_decode($pem);
+		$der = substr($der, 22, strlen($der)); // We skip the first 22 bytes.
+
+		// We only use the first half of the hash.
+		$sha = substr(sha1($der), 0, 20);
+
+		$onion_hash = Base32::encode(hex2bin($sha));
+
+		return strtolower($onion_hash);
+	}
 }
-
-// We obtain the publicKey from the valid privateKey.
-$publicKey = openssl_pkey_get_details($privateKey);
-
-// Convert PEM to DER encoding before hashing with SHA-1.
-$string_start = '-----BEGIN PUBLIC KEY-----';
-$string_end = '-----END PUBLIC KEY-----';
-$pem = substr($publicKey['key'], (strpos($publicKey['key'], $string_start)+strlen($string_start)), (strlen($publicKey['key']) - strpos($publicKey['key'], $string_end))*(-1));
-
-$der = base64_decode($pem);
-$der = substr($der, 22, strlen($der)); // We skip the first 22 bytes.
-
-// We only use the first half of the hash.
-$sha = substr(sha1($der), 0, 20);
-
-$onion_hash = Base32::encode(hex2bin($sha));
-
-echo strtolower($onion_hash);
 
 class Base32 {
 	private static $map = array(
